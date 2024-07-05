@@ -1,22 +1,31 @@
 import socket
+import random
 
-from event_loop import loop, create_task
+from event_loop import loop, create_task, read_ready, sleep
 
 
 HOST, PORT = "127.0.0.1", 8000
+SIMULATE_SLOW_IO = True
 
 
 def handle_request(sock: socket.socket, addr: str):
-    print(f"Connection from -> {addr}")
+    print(f"{addr} -> connection start")
 
     with sock:
-        yield sock
+        yield from read_ready(sock)
         request = sock.recv(1024)
-        print(f"Received -> {request}")
-        request = b"pong" if request == b"ping" else request
-        sock.send(request.upper())
+        print(f"{addr} received -> {request}")
 
-    print(f"Connection is ended <- {addr}")
+        if SIMULATE_SLOW_IO:
+            yield from sleep(random.randint(0, 2))
+
+        request = b"pong" if request == b"ping" else request
+        response = request.upper()
+
+        print(f"{addr} response <- {response}")
+        sock.send(response)
+
+    print(f"{addr} <- connection end")
 
 
 def start_server(host: str, port: int):
@@ -28,11 +37,10 @@ def start_server(host: str, port: int):
         print(f"Starting server at {host}:{port}")
 
         while True:
-            yield srv_sock
+            yield from read_ready(srv_sock)
             client_sock, addr = srv_sock.accept()
             client_sock.setblocking(False)
-            # yield from handle_request(client_sock, addr)  # await
-            create_task(handle_request(client_sock, addr))  # schedule
+            create_task(handle_request(client_sock, addr))
 
 
 if __name__ == "__main__":

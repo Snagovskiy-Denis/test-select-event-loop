@@ -1,4 +1,4 @@
-import socket
+import time
 
 from contextlib import suppress
 from typing import Generator, NoReturn
@@ -6,36 +6,53 @@ from selectors import DefaultSelector, EVENT_READ
 from inspect import isgenerator
 
 
-_tasks = []
+_waiting = []
+_ready = []
+_current_gen: Generator = None  # pyright: ignore
+
 _selector = DefaultSelector()
 
 
-def _wait_for(sock: socket.socket, subscriber: Generator) -> None:
-    _selector.register(sock, EVENT_READ, subscriber)
-
-
-def _run(task: Generator) -> None:
-    assert isgenerator(task)
+def _run(gen: Generator) -> None:
+    assert isgenerator(gen)
+    global _current_gen
+    _current_gen = gen
     with suppress(StopIteration):
-        if maybe_socket := next(task):
-            _wait_for(maybe_socket, task)
+        next(gen)
+
+
+def read_ready(fileobj):
+    _selector.register(fileobj, EVENT_READ, _current_gen)
+    yield
+
+
+def sleep(seconds: float):
+    target = time.time() + seconds
+    _waiting.append((target, _current_gen))
+    yield
 
 
 def create_task(generator: Generator) -> None:
     """Schedule background execution of a generator"""
     assert isgenerator(generator)
-    _tasks.append(generator)
+    _ready.append(generator)
 
 
 def loop(main: Generator) -> NoReturn:
     """Start the event loop that handles select syscalls"""
     create_task(main)
+
     while True:
-        while _tasks:
-            _run(_tasks.pop(0))
+        while _ready:
+            _run(_ready.pop(0))
+
+        for target, gen in _waiting.copy():
+            if time.time() > target:
+                _waiting.remove((target, gen))
+                _run(gen)
 
         try:
-            events = _selector.select()
+            events = _selector.select(-1)
         except KeyboardInterrupt:
             exit()
 
