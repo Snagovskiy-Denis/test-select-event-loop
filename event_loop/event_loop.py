@@ -2,7 +2,7 @@ import time
 
 from contextlib import suppress
 from typing import Generator, NoReturn
-from selectors import DefaultSelector, EVENT_READ
+from selectors import EVENT_WRITE, DefaultSelector, EVENT_READ
 from inspect import isgenerator
 
 
@@ -21,9 +21,17 @@ def _run(gen: Generator) -> None:
         next(gen)
 
 
-def read_ready(fileobj):
-    _selector.register(fileobj, EVENT_READ, _current_gen)
+def wait_sock(fileobj, events):
+    _selector.register(fileobj, events, _current_gen)
     yield
+
+
+def read_ready(fileobj):
+    yield from wait_sock(fileobj, EVENT_READ)
+
+
+def write_ready(fileobj):
+    yield from wait_sock(fileobj, EVENT_WRITE)
 
 
 def sleep(seconds: float):
@@ -51,10 +59,7 @@ def loop(main: Generator) -> NoReturn:
                 _waiting.remove((target, gen))
                 _run(gen)
 
-        try:
-            events = _selector.select(-1)
-        except KeyboardInterrupt:
-            exit()
+        events = _selector.select(-1)
 
         for selector_key, _ in events:
             _selector.unregister(selector_key.fileobj)
