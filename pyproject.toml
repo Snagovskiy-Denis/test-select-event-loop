@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "event-loop"
+version = "0.1.0"
+description = ""
+authors = ["Denis Snagovskiy <denis.snagovskiy@list.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
